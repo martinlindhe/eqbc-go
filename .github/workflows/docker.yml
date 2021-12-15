@@ -1,9 +1,9 @@
-name: docker
+name: Docker
 
 on:
   push:
     branches:
-      - 'master'
+      - 'main'
 
 jobs:
   docker:
