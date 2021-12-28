@@ -124,15 +124,42 @@ func (eqbc *EQBC) broadcast(pkt string) {
 }
 
 func (eqbc *EQBC) sendTo(receiver, pkt string) error {
+	// send to a single client
 	c := eqbc.getClientByName(receiver)
-	if c == nil {
+	if c != nil {
+		if _, err := c.con.Write([]byte(pkt)); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// send to all members of a channel
+	members, err := eqbc.getChannelMembers(receiver)
+	if err != nil {
 		return fmt.Errorf("%s: No such name", receiver)
 	}
 
-	if _, err := c.con.Write([]byte(pkt)); err != nil {
-		return err
+	for _, member := range members {
+		c := eqbc.getClientByName(member)
+		if c == nil {
+			eqbc.Log("failed to find client: " + member)
+			continue
+		}
+		if _, err := c.con.Write([]byte(pkt)); err != nil {
+			eqbc.Log("failed to send to client: " + err.Error())
+			continue
+		}
 	}
 	return nil
+}
+
+func (eqbc *EQBC) getChannelMembers(channelName string) ([]string, error) {
+	for channel, members := range eqbc.channelMembers {
+		if strings.EqualFold(channel, channelName) {
+			return members, nil
+		}
+	}
+	return nil, fmt.Errorf("%s: No such channel", channelName)
 }
 
 func (eqbc *EQBC) handleConnection(con net.Conn) {
@@ -192,7 +219,9 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			*/
 			continue
 
-		case "\tTELL\n": // /bct username content
+		case "\tTELL\n":
+			// /bct username command
+			// /bct channel command
 			data, err := readBytes(clientReader)
 			if err != nil {
 				eqbc.Log(fmt.Sprintf("[% 4d] error(1b): %v", clientID, err))
@@ -219,7 +248,8 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 				}
 			}
 
-		case "\tMSGALL\n": // /bca content
+		case "\tMSGALL\n":
+			// /bca content
 			data, err := readBytes(clientReader)
 			if err != nil {
 				eqbc.Log(fmt.Sprintf("[% 4d] error(1c): %v", clientID, err))
