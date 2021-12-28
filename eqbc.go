@@ -162,6 +162,18 @@ func (eqbc *EQBC) getChannelMembers(channelName string) ([]string, error) {
 	return nil, fmt.Errorf("%s: No such channel", channelName)
 }
 
+func (eqbc *EQBC) pingClient(con net.Conn, clientID uint64) {
+	ticker := time.NewTicker(30 * time.Second)
+	for range ticker.C {
+		_, err := con.Write([]byte("\tPING\n"))
+		if err != nil {
+			eqbc.Log(fmt.Sprintf("[% 4d] PING failed: %s, removing client", clientID, err.Error()))
+			eqbc.destroyClient(clientID)
+			return
+		}
+	}
+}
+
 func (eqbc *EQBC) handleConnection(con net.Conn) {
 
 	defer con.Close()
@@ -193,6 +205,8 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 	eqbc.registerClient(con, clientID, username)
 	eqbc.nbJoin(username)
 	eqbc.Log(fmt.Sprintf("[% 4d] [+g+]%s joined", clientID, username))
+
+	go eqbc.pingClient(con, clientID)
 
 	for {
 		msgType, err := readBytes(clientReader)
@@ -319,6 +333,19 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			eqbc.destroyClient(clientID)
 			eqbc.nbQuit(username)
 			return
+
+		case "\tPONG\n":
+			// we initiate pings so just swallow these
+			data, err := readBytes(clientReader)
+			if err != nil {
+				eqbc.Log(fmt.Sprintf("[% 4d] error(1b): %v", clientID, err))
+				return
+			}
+			payload := strings.TrimSpace(string(data))
+			if payload != "" {
+				eqbc.Log(fmt.Sprintf("[% 4d] Unexpected PONG data from client: %s", clientID, payload))
+			}
+			continue
 
 		default:
 			// /bc commands: broadcast to all clients

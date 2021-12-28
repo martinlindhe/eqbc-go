@@ -157,3 +157,15 @@ CLIENT SENDS:
 
 SERVER RESPONDS:
     "-- Names: User1, User2, User3.\n"
+
+
+
+
+# PING / PONG
+
+server sends:
+    "\tPING\n"
+
+client responds:
+    "\tPONG\n"
+    "\n"
