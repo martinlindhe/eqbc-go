@@ -85,7 +85,6 @@ func (eqbc *EQBC) leaveAllChannels(clientID uint64) {
 				list = append(list, n)
 			}
 		}
-		eqbc.Log(fmt.Sprintf("[% 4d] destroyClient CHANNEL %s ADJUSTED FROM %s TO %s", clientID, channel, strings.Join(members, " "), strings.Join(list, " ")))
 		eqbc.channelMembers[channel] = list
 	}
 }
