@@ -10,9 +10,9 @@ Tested with MQ2EQBC 15.0503, as distributed with the PEQ MQ2.
 
 ## Improvements vs. stock eqbcs2.exe (peq mq2 build)
 
-- No upper limit to connected clients (eqbcs2.exe has a limit of 55 clients)
+- No upper limit on connected clients (eqbcs2.exe has a limit of 55 clients)
 
-- --timestamp flag decorates log with timestamps
+- Log entries have timestamps
 
 - Colorized output
 

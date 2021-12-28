@@ -5,6 +5,7 @@ port : 2112  is default port
 
 
 
+
 ## Packet format
 
 The first login command:   "LOGIN=name;" or "LOGIN:password=name;"
@@ -27,10 +28,11 @@ All commands after LOGIN is in the following format:
 
 
 
+
 ## /bccmd connect <server> <port> <password>
 
 client command:
-    /bccmd connect 127.0.0.1 2113
+    /bccmd connect 127.0.0.1 2112
 
 CLIENT SENDS:
     "LOGIN=User1;"
@@ -47,17 +49,6 @@ SERVER SENDS:
 
 
 
-## NBMSG
-
-CLIENT SENDS:
-    "\tNBMSG\n"
-    "[NB]|data|[NB]\n"
-
-SERVER BROADCASTS:
-    "\tNBPKT:User1:[NB]|data|[NB]\n"
-
-
-
 
 ## DISCONNECT
 
@@ -70,6 +61,19 @@ CLIENT SENDS:
 SERVER BROADCASTS:
     "\tNBQUIT=User1\n"
     "\tNBCLIENTLIST=User2 User3\n"
+
+
+
+
+## NBMSG
+
+CLIENT SENDS:
+    "\tNBMSG\n"
+    "[NB]|data|[NB]\n"
+
+SERVER BROADCASTS:
+    "\tNBPKT:User1:[NB]|data|[NB]\n"
+
 
 
 
@@ -105,9 +109,42 @@ SERVER SENDS TO each other user:
     "<User1> User2 //say hello\n"
 
 
+
+
 ## /bcg, /bcga
 
 NOTE: Is translated to /bct commands in MQ2EQBC.dll
+
+
+
+
+## JOIN CHANNELS
+
+set the list of channels to receive tells from
+
+client command:
+    /bccmd channels chan1 chan2
+
+CLIENT SENDS:
+    "\tCHANNELS\n"
+    "chan1 chan2\n"
+
+SERVER RESPONDS:
+    "Client joined channels chan1 chan2.\n"
+
+
+
+
+## SEND TELLS TO CHANNELS
+
+send cmd to all in channel "chan1":
+    /bct chan1 //say hello
+
+CLIENT SENDS:
+    "\tTELL\n"
+    "chan1 //say hello\n"
+
+
 
 
 ## Client names

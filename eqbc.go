@@ -12,11 +12,12 @@ import (
 )
 
 type EQBC struct {
-	clients       map[uint64]eqbcClient
-	verbose       bool
-	noTimestamp   bool
-	password      string
-	clientCounter uint64
+	clients        map[uint64]eqbcClient
+	verbose        bool
+	noTimestamp    bool
+	password       string
+	clientCounter  uint64
+	channelMembers map[string][]string
 }
 
 type eqbcClient struct {
@@ -32,10 +33,11 @@ type ServerConfig struct {
 
 func NewServer(cfg ServerConfig) *EQBC {
 	return &EQBC{
-		clients:     make(map[uint64]eqbcClient),
-		verbose:     cfg.Verbose,
-		noTimestamp: cfg.NoTimestamp,
-		password:    cfg.Password,
+		clients:        make(map[uint64]eqbcClient),
+		verbose:        cfg.Verbose,
+		noTimestamp:    cfg.NoTimestamp,
+		password:       cfg.Password,
+		channelMembers: make(map[string][]string),
 	}
 }
 
@@ -69,7 +71,23 @@ func (eqbc *EQBC) registerClient(con net.Conn, clientID uint64, name string) {
 }
 
 func (eqbc *EQBC) destroyClient(clientID uint64) {
+	eqbc.leaveAllChannels(clientID)
 	delete(eqbc.clients, clientID)
+}
+
+// remove client from all their channels
+func (eqbc *EQBC) leaveAllChannels(clientID uint64) {
+	name := eqbc.getClientName(clientID)
+	for channel, members := range eqbc.channelMembers {
+		list := []string{}
+		for _, n := range members {
+			if n != name {
+				list = append(list, n)
+			}
+		}
+		eqbc.Log(fmt.Sprintf("[% 4d] destroyClient CHANNEL %s ADJUSTED FROM %s TO %s", clientID, channel, strings.Join(members, " "), strings.Join(list, " ")))
+		eqbc.channelMembers[channel] = list
+	}
 }
 
 func (eqbc *EQBC) getClientNames() (res []string) {
@@ -77,6 +95,15 @@ func (eqbc *EQBC) getClientNames() (res []string) {
 		res = append(res, c.name)
 	}
 	return
+}
+
+func (eqbc *EQBC) getClientName(clientID uint64) string {
+	for id, c := range eqbc.clients {
+		if id == clientID {
+			return c.name
+		}
+	}
+	return ""
 }
 
 func (eqbc *EQBC) getClientByName(name string) *eqbcClient {
@@ -236,6 +263,26 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			names := strings.Join(eqbc.getClientNames(), ", ")
 			eqbc.Log(fmt.Sprintf("[% 4d] requested names: %s", clientID, names))
 			con.Write([]byte("-- Names: " + names + ".\n"))
+
+		case "\tCHANNELS\n":
+			// set the list of channels to receive tells from
+			data, err := readBytes(clientReader)
+			if err != nil {
+				eqbc.Log(fmt.Sprintf("[% 4d] error(1e): %v", clientID, err))
+				return
+			}
+			payload := strings.TrimSpace(string(data))
+			channels := strings.Split(payload, " ")
+
+			// remove user from all channels
+			eqbc.leaveAllChannels(clientID)
+
+			// add user to the listed channels
+			for _, c := range channels {
+				eqbc.channelMembers[c] = append(eqbc.channelMembers[c], username)
+			}
+
+			con.Write([]byte(username + " joined channels " + payload + ".\n"))
 
 		case "\tDISCONNECT\n":
 			eqbc.Log(fmt.Sprintf("[% 4d] [+r+]%s disconnected", clientID, username))

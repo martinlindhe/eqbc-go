@@ -22,10 +22,10 @@ https://medium.com/swlh/create-go-service-the-easy-way-de827d7f07cf
 
 
 
+# PING / PONG
 
+server sends:
+  "\tPING\n"
 
-
-# IMPLEMENT BC CHANNELS:
-
-/bccmd channels <channel list>
-    Set the list of channels to receive tells from.
+client responds:
+  "\tPONG\n"
