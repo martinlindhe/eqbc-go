@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/alecthomas/kong"
-
 	"github.com/martinlindhe/eqbc-go"
 )
 
@@ -17,7 +16,6 @@ var args struct {
 }
 
 func main() {
-
 	_ = kong.Parse(&args,
 		kong.Name("eqbc-go"))
 

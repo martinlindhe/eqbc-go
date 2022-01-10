@@ -16,16 +16,6 @@ All commands after LOGIN is in the following format:
     \tCMD\n
     payload\n
 
-// eqbcs msg types
-#define CMD_DISCONNECT "\tDISCONNECT\n"
-#define CMD_NAMES "\tNAMES\n"
-#define CMD_PONG "\tPONG\n"
-#define CMD_MSGALL "\tMSGALL\n"
-#define CMD_TELL "\tTELL\n"
-#define CMD_CHANNELS "\tCHANNELS\n"
-#define CMD_LOCALECHO "\tLOCALECHO "
-#define CMD_BCI "\tBCI\n"
-
 
 
 

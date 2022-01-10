@@ -17,3 +17,11 @@ Tested with MQ2EQBC 15.0503, as distributed with the PEQ MQ2.
 - Colorized output
 
 - [Docker ready](https://hub.docker.com/repository/docker/martinlindhe/eqbc-go)
+
+
+
+## Batch re-connect
+
+```
+/multiline ; /bcaa //timed 5 /bccmd quit ; /bcaa //timed 10 /bccmd connect localhost 2112
+```

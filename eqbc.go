@@ -4,14 +4,17 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
 )
 
 type EQBC struct {
+	sync.RWMutex
 	clients        map[uint64]eqbcClient
 	verbose        bool
 	noTimestamp    bool
@@ -59,29 +62,36 @@ func (eqbc *EQBC) Listen(addr string) error {
 }
 
 func (eqbc *EQBC) Log(s string) {
+	out := ""
 	if !eqbc.noTimestamp {
-		fmt.Print("[" + time.Now().Format("15:04:05") + "]")
+		out = "[" + time.Now().Format("15:04:05") + "]"
 	}
-	fmt.Println(colorize(s))
+	out += colorize(s)
+	fmt.Println(out)
 }
 
-// register clientID == name mapping
-func (eqbc *EQBC) registerClient(con net.Conn, clientID uint64, name string) {
-	eqbc.clients[clientID] = eqbcClient{con, name}
+// register clientID == name mapping.
+func (eqbc *EQBC) registerClient(con net.Conn, clientID uint64, clientName string) {
+	eqbc.Lock()
+	defer eqbc.Unlock()
+	eqbc.clients[clientID] = eqbcClient{con, clientName}
 }
 
-func (eqbc *EQBC) destroyClient(clientID uint64) {
-	eqbc.leaveAllChannels(clientID)
+func (eqbc *EQBC) destroyClient(clientName string, clientID uint64) {
+	eqbc.leaveAllChannels(clientName)
+	eqbc.Lock()
+	defer eqbc.Unlock()
 	delete(eqbc.clients, clientID)
 }
 
-// remove client from all their channels
-func (eqbc *EQBC) leaveAllChannels(clientID uint64) {
-	name := eqbc.getClientName(clientID)
+// Remove client from all their channels.
+func (eqbc *EQBC) leaveAllChannels(username string) {
+	eqbc.Lock()
+	defer eqbc.Unlock()
 	for channel, members := range eqbc.channelMembers {
 		list := []string{}
 		for _, n := range members {
-			if n != name {
+			if n != username {
 				list = append(list, n)
 			}
 		}
@@ -89,7 +99,18 @@ func (eqbc *EQBC) leaveAllChannels(clientID uint64) {
 	}
 }
 
+// add user to the listed channels.
+func (eqbc *EQBC) joinChannels(username string, channels []string) {
+	eqbc.Lock()
+	defer eqbc.Unlock()
+	for _, c := range channels {
+		eqbc.channelMembers[c] = append(eqbc.channelMembers[c], username)
+	}
+}
+
 func (eqbc *EQBC) getClientNames() (res []string) {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
 	for _, c := range eqbc.clients {
 		res = append(res, c.name)
 	}
@@ -97,6 +118,8 @@ func (eqbc *EQBC) getClientNames() (res []string) {
 }
 
 func (eqbc *EQBC) getClientName(clientID uint64) string {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
 	for id, c := range eqbc.clients {
 		if id == clientID {
 			return c.name
@@ -106,6 +129,8 @@ func (eqbc *EQBC) getClientName(clientID uint64) string {
 }
 
 func (eqbc *EQBC) getClientByName(name string) *eqbcClient {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
 	for _, c := range eqbc.clients {
 		if strings.EqualFold(name, c.name) {
 			return &c
@@ -115,10 +140,28 @@ func (eqbc *EQBC) getClientByName(name string) *eqbcClient {
 }
 
 func (eqbc *EQBC) broadcast(pkt string) {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
 	for clientID, c := range eqbc.clients {
 		if _, err := c.con.Write([]byte(pkt)); err != nil {
 			eqbc.Log(fmt.Sprintf("[% 4d] failed to respond to client: %v", clientID, err))
 		}
+	}
+}
+
+// Send payload to all other clients, excluding `senderName`.
+func (eqbc *EQBC) broadcastOthers(clientID uint64, senderName, payload string) {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
+	for _, c := range eqbc.clients {
+		if c.name == senderName {
+			continue
+		}
+		pkt := "<" + senderName + "> " + c.name + " " + payload + "\n"
+		if eqbc.verbose {
+			eqbc.Log(fmt.Sprintf("[% 4d] TO %s: %s", clientID, c.name, strings.TrimSpace(pkt)))
+		}
+		_ = eqbc.sendTo(c.name, pkt)
 	}
 }
 
@@ -153,6 +196,8 @@ func (eqbc *EQBC) sendTo(receiver, pkt string) error {
 }
 
 func (eqbc *EQBC) getChannelMembers(channelName string) ([]string, error) {
+	eqbc.RLock()
+	defer eqbc.RUnlock()
 	for channel, members := range eqbc.channelMembers {
 		if strings.EqualFold(channel, channelName) {
 			return members, nil
@@ -161,13 +206,14 @@ func (eqbc *EQBC) getChannelMembers(channelName string) ([]string, error) {
 	return nil, fmt.Errorf("%s: No such channel", channelName)
 }
 
-func (eqbc *EQBC) pingClient(con net.Conn, clientID uint64) {
-	ticker := time.NewTicker(30 * time.Second)
+func (eqbc *EQBC) pingClient(con io.Writer, clientID uint64) {
+	ticker := time.NewTicker(2 * time.Minute)
 	for range ticker.C {
 		_, err := con.Write([]byte("\tPING\n"))
 		if err != nil {
 			eqbc.Log(fmt.Sprintf("[% 4d] PING failed: %s, removing client", clientID, err.Error()))
-			eqbc.destroyClient(clientID)
+			clientName := eqbc.getClientName(clientID)
+			eqbc.destroyClient(clientName, clientID)
 			return
 		}
 	}
@@ -190,20 +236,20 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 		return
 	}
 
-	username, password, err := parseLoginPacket(login)
+	clientName, password, err := parseLoginPacket(login)
 	if err != nil {
 		eqbc.Log("LOGIN error: " + err.Error())
 		return
 	}
 	if password != eqbc.password {
 		eqbc.Log(fmt.Sprintf("[% 4d] error: invalid password", clientID))
-		con.Write([]byte("-- Invalid server password.\n"))
+		_, _ = con.Write([]byte("-- Invalid server password.\n"))
 		return
 	}
 
-	eqbc.registerClient(con, clientID, username)
-	eqbc.nbJoin(username)
-	eqbc.Log(fmt.Sprintf("[% 4d] [+g+]%s joined", clientID, username))
+	eqbc.registerClient(con, clientID, clientName)
+	eqbc.nbJoin(clientName)
+	eqbc.Log(fmt.Sprintf("[% 4d] [+g+]%s joined", clientID, clientName))
 
 	go eqbc.pingClient(con, clientID)
 
@@ -211,9 +257,9 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 		msgType, err := readBytes(clientReader)
 		if err != nil {
 			// in case of network error, broadcast disconnect to all
-			eqbc.Log(fmt.Sprintf("[% 4d] [+r+]%s disconnected (error: %v)", clientID, username, err))
-			eqbc.destroyClient(clientID)
-			eqbc.nbQuit(username)
+			eqbc.Log(fmt.Sprintf("[% 4d] [+r+]%s disconnected (error: %v)", clientID, clientName, err))
+			eqbc.destroyClient(clientName, clientID)
+			eqbc.nbQuit(clientName)
 			return
 		}
 
@@ -252,7 +298,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 
 			receiver := payload[0:pos]
 			content := payload[pos+1:]
-			pkt := "[" + username + "] " + content + "\n"
+			pkt := "[" + clientName + "] " + content + "\n"
 			eqbc.Log(fmt.Sprintf("[% 4d] TO %s: %s", clientID, receiver, strings.TrimSpace(pkt)))
 			if err := eqbc.sendTo(receiver, pkt); err != nil {
 				// if receiver is not connected, return an error to client
@@ -271,17 +317,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			payload := strings.TrimSpace(string(data))
 			eqbc.Log(fmt.Sprintf("[% 4d] BCA %s", clientID, payload))
 
-			// send command to all other clients
-			for _, c := range eqbc.clients {
-				if c.name == username {
-					continue
-				}
-				pkt := "<" + username + "> " + c.name + " " + payload + "\n"
-				if eqbc.verbose {
-					eqbc.Log(fmt.Sprintf("[% 4d] TO %s: %s", clientID, c.name, strings.TrimSpace(pkt)))
-				}
-				eqbc.sendTo(c.name, pkt)
-			}
+			eqbc.broadcastOthers(clientID, clientName, payload)
 
 		case "\tNBMSG\n":
 			// netbots message
@@ -293,9 +329,9 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			payload := strings.TrimSpace(string(data))
 
 			// broadcast NBPKT
-			pkt := "\tNBPKT:" + username + ":" + payload + "\n"
+			pkt := "\tNBPKT:" + clientName + ":" + payload + "\n"
 			if eqbc.verbose {
-				//eqbc.Log(fmt.Sprintf("[% 4d] NBMSG: %s", clientID, payload))
+				// eqbc.Log(fmt.Sprintf("[% 4d] NBMSG: %s", clientID, payload))
 				eqbc.Log(fmt.Sprintf("[% 4d] -> %s", clientID, strings.TrimSpace(pkt)))
 			}
 			eqbc.broadcast(pkt)
@@ -305,7 +341,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			// respond with all connected client names
 			names := strings.Join(eqbc.getClientNames(), ", ")
 			eqbc.Log(fmt.Sprintf("[% 4d] requested names: %s", clientID, names))
-			con.Write([]byte("-- Names: " + names + ".\n"))
+			_, _ = con.Write([]byte("-- Names: " + names + ".\n"))
 
 		case "\tCHANNELS\n":
 			// set the list of channels to receive tells from
@@ -317,20 +353,15 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 			payload := strings.TrimSpace(string(data))
 			channels := strings.Split(payload, " ")
 
-			// remove user from all channels
-			eqbc.leaveAllChannels(clientID)
+			eqbc.leaveAllChannels(clientName)
+			eqbc.joinChannels(clientName, channels)
 
-			// add user to the listed channels
-			for _, c := range channels {
-				eqbc.channelMembers[c] = append(eqbc.channelMembers[c], username)
-			}
-
-			con.Write([]byte(username + " joined channels " + payload + ".\n"))
+			_, _ = con.Write([]byte(clientName + " joined channels " + payload + ".\n"))
 
 		case "\tDISCONNECT\n":
-			eqbc.Log(fmt.Sprintf("[% 4d] [+r+]%s disconnected", clientID, username))
-			eqbc.destroyClient(clientID)
-			eqbc.nbQuit(username)
+			eqbc.Log(fmt.Sprintf("[% 4d] [+r+]%s disconnected", clientID, clientName))
+			eqbc.destroyClient(clientName, clientID)
+			eqbc.nbQuit(clientName)
 			return
 
 		case "\tPONG\n":
@@ -348,7 +379,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 
 		default:
 			// /bc commands: broadcast to all clients
-			pkt := "<" + username + "> " + string(msgType)
+			pkt := "<" + clientName + "> " + string(msgType)
 			eqbc.Log(fmt.Sprintf("[% 4d] %s", clientID, strings.TrimSpace(pkt)))
 			eqbc.broadcast(pkt)
 		}
@@ -412,14 +443,14 @@ func getColor(token string) *color.Color {
 	return color.New(color.FgWhite)
 }
 
-// broadcast NBJOIN
+// broadcast NBJOIN.
 func (eqbc *EQBC) nbJoin(username string) {
 	pkt := "\tNBJOIN=" + username + "\n" +
 		"\tNBCLIENTLIST=" + strings.Join(eqbc.getClientNames(), " ") + "\n"
 	eqbc.broadcast(pkt)
 }
 
-// broadcast NBQUIT
+// broadcast NBQUIT.
 func (eqbc *EQBC) nbQuit(username string) {
 	pkt := "\tNBQUIT=" + username + "\n" +
 		"\tNBCLIENTLIST=" + strings.Join(eqbc.getClientNames(), " ") + "\n"
