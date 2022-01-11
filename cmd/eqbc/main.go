@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	"github.com/alecthomas/kong"
+	"github.com/fatih/color"
+
 	"github.com/martinlindhe/eqbc-go"
 )
 
@@ -13,11 +15,16 @@ var args struct {
 	Password    string `help:"Server password." default:""`
 	Verbose     bool   `short:"v" help:"Be more verbose."`
 	NoTimestamp bool   `help:"Hide timestamps from log."`
+	NoColor     bool   `help:"Disable color output."`
 }
 
 func main() {
 	_ = kong.Parse(&args,
 		kong.Name("eqbc-go"))
+
+	if args.NoColor {
+		color.NoColor = true // disables colorized output
+	}
 
 	listenAddr := fmt.Sprintf("%s:%d", args.Host, args.Port)
 
