@@ -43,8 +43,11 @@ func colorize(s string) string {
 
 func getColor(token string) *color.Color {
 	switch token {
-	case "b", "B":
-		return color.New(color.FgBlack)
+	case "b":
+		return color.New(color.FgHiBlack)
+
+	case "x": // white
+		return color.New(color.FgHiWhite)
 
 	case "g":
 		return color.New(color.FgHiGreen)
@@ -55,6 +58,32 @@ func getColor(token string) *color.Color {
 	case "r":
 		return color.New(color.FgHiRed)
 
+	case "o":
+		// XXX orange. not in ansi16
+		return color.New(color.FgHiRed)
+
+	case "u":
+		return color.New(color.FgHiBlue)
+
+	case "t":
+		return color.New(color.FgHiCyan)
+
+	case "m":
+		return color.New(color.FgHiMagenta)
+
+	case "p":
+		// XXX purple. not in ansi16
+		return color.New(color.FgHiMagenta)
+
+	case "w":
+		return color.New(color.FgHiWhite)
+
+	case "B":
+		return color.New(color.FgBlack)
+
+	case "X": // white
+		return color.New(color.FgHiWhite)
+
 	case "G": // dark green
 		return color.New(color.FgGreen)
 
@@ -64,8 +93,22 @@ func getColor(token string) *color.Color {
 	case "R": // dark red
 		return color.New(color.FgRed)
 
-	case "w":
-		return color.New(color.FgHiWhite)
+	case "O":
+		// XXX dark orange. not in ansi16
+		return color.New(color.FgRed)
+
+	case "U":
+		return color.New(color.FgBlue)
+
+	case "T":
+		return color.New(color.FgCyan)
+
+	case "M":
+		return color.New(color.FgMagenta)
+
+	case "P":
+		// XXX purple. not in ansi16
+		return color.New(color.FgMagenta)
 
 	case "W": // light grey
 		return color.New(color.FgWhite)
