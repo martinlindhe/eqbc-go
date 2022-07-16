@@ -16,7 +16,7 @@ Tested with MQ2EQBC 15.0503, as distributed with the PEQ MQ2.
 
 - Colorized output
 
-- [Docker ready](https://hub.docker.com/repository/docker/martinlindhe/eqbc-go)
+- [Docker ready](https://hub.docker.com/r/martinlindhe/eqbc-go)
 
 
 
