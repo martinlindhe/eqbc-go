@@ -276,6 +276,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 				return
 			}
 			payload := strings.TrimSpace(string(data))
+			payload = strings.ReplaceAll(payload, "\\\\", "") // Suppress the backslash \\
 			eqbc.Log(fmt.Sprintf("[% 4d] TELL: %s", clientID, payload))
 
 			pos := strings.Index(payload, " ")
@@ -304,6 +305,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 				return
 			}
 			payload := strings.TrimSpace(string(data))
+			payload = strings.ReplaceAll(payload, "\\\\", "") // Suppress the backslash \\
 			eqbc.Log(fmt.Sprintf("[% 4d] BCA %s", clientID, payload))
 
 			eqbc.broadcastOthers(clientID, clientName, payload)
@@ -316,6 +318,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 				return
 			}
 			payload := strings.TrimSpace(string(data))
+			payload = strings.ReplaceAll(payload, "\\\\", "") // Suppress the backslash \\
 
 			// broadcast NBPKT
 			pkt := "\tNBPKT:" + clientName + ":" + payload + "\n"
@@ -340,6 +343,7 @@ func (eqbc *EQBC) handleConnection(con net.Conn) {
 				return
 			}
 			payload := strings.TrimSpace(string(data))
+			payload = strings.ReplaceAll(payload, "\\\\", "") // Suppress the backslash \\
 			channels := strings.Split(payload, " ")
 
 			eqbc.leaveAllChannels(clientName)
